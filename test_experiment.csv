@@ -1,0 +1,10 @@
+parameter,value,description
+avg_rounds,2,Average number of rounds per pairing
+rounds_fixed,true,Whether rounds are fixed (true) or stochastic/Poisson (false)
+total_pairings,3,Total number of pairings to run
+allow_gossip,true,Whether agents can share information about others after pairings
+memory_limit,500,Maximum characters for memory about each other agent
+max_communication_rounds,1,Maximum back-and-forth messages before move decision
+game_proportions,"pd:50,sh:25,hd:25,coord:0",Relative proportions of game types
+game_varies_across_pairings,true,If true game type set per pairing
+allow_thinking,true,Whether agents can use thinking tags for private thoughts

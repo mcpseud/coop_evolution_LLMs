@@ -54,24 +54,24 @@ Or pass it as a command-line argument when running simulations.
 ### Step 3: Download the Simulation Files
 
 Place all the Python files in a directory:
-- `main.py`
+- `game_theory_main.py`
 - `simulation_engine.py`
-- `agent.py`
+- `agent_class.py`
 - `game_manager.py`
-- `scenarios.py`
+- `scenarios_manager.py`
 - `config_loader.py`
 - `data_logger.py`
 
 ## Quick Start
 
 1. **Use the provided example configuration files**:
-   - `example_agents.csv` - Defines different agent strategies
-   - `example_experiment_config.csv` - Sets experiment parameters
+   - `example_agents_csv.csv` - Defines different agent strategies
+   - `example_experiment_csv.csv` - Sets experiment parameters
 
 2. **Run your first simulation**:
 
 ```bash
-python main.py --agents example_agents.csv --config example_experiment_config.csv --output my_first_run/
+python game_theory_main.py --agents example_agents_csv.csv --config example_experiment_csv.csv --output my_first_run/
 ```
 
 3. **Check the results** in the `my_first_run/` directory
@@ -82,11 +82,11 @@ The system consists of several modular components:
 
 ### Core Components
 
-1. **main.py**: Entry point, handles command-line arguments
+1. **game_theory_main.py**: Entry point, handles command-line arguments
 2. **simulation_engine.py**: Orchestrates the simulation
-3. **agent.py**: Implements LLM-based agents with memory and communication
+3. **agent_class.py**: Implements LLM-based agents with memory and communication
 4. **game_manager.py**: Handles game logic and payoff calculations
-5. **scenarios.py**: Provides business contexts for games
+5. **scenarios_manager.py**: Provides business contexts for games
 6. **config_loader.py**: Loads configuration from CSV files
 7. **data_logger.py**: Records all simulation data
 
@@ -113,13 +113,13 @@ Defines the agent strategies and their properties:
 
 ```csv
 strategy_name,system_prompt,model,frequency
-Tit-for-Tat,"You mirror your partner's previous action...",gpt-4,3
-Always Cooperate,"You always seek mutual benefit...",gpt-4,2
+Tit-for-Tat,"You mirror your partner's previous action...",gpt-4.1-nano,3
+Always Cooperate,"You always seek mutual benefit...",gpt-4.1-nano,2
 ```
 
 - **strategy_name**: Identifier for the strategy
 - **system_prompt**: Instructions that define agent behavior
-- **model**: OpenAI model to use (e.g., gpt-4, gpt-3.5-turbo)
+- **model**: OpenAI model to use (e.g., gpt-4.1-nano, gpt-4.1-mini)
 - **frequency**: How many agents of this type to create
 
 ### experiment_config.csv
@@ -168,7 +168,7 @@ Key parameters:
 ### Basic Usage
 
 ```bash
-python main.py --agents agents.csv --config experiment_config.csv --output results/
+python game_theory_main.py --agents example_agents_csv.csv --config example_experiment_csv.csv --output results/
 ```
 
 ### Command-Line Options
@@ -185,7 +185,7 @@ python main.py --agents agents.csv --config experiment_config.csv --output resul
 Test your configuration without using API credits:
 
 ```bash
-python main.py --agents agents.csv --config config.csv --dry-run
+python game_theory_main.py --agents example_agents_csv.csv --config example_experiment_csv.csv --dry-run
 ```
 
 ## Understanding Output
@@ -253,7 +253,7 @@ for game, moves in results['moves_by_game'].items():
 
 ### Adding New Scenarios
 
-Edit `scenarios.py` to add business scenarios:
+Edit `scenarios_manager.py` to add business scenarios:
 
 ```python
 new_scenario = {
@@ -270,7 +270,7 @@ Add new rows to your agents.csv:
 
 ```csv
 strategy_name,system_prompt,model,frequency
-Cautious Cooperator,"You prefer cooperation but need to see consistent good faith...",gpt-4,2
+Cautious Cooperator,"You prefer cooperation but need to see consistent good faith...",gpt-4.1-nano,2
 ```
 
 ### Modifying Game Payoffs
@@ -300,7 +300,7 @@ self.payoff_matrices['prisoners_dilemma'] = {
 3. **High API costs**
    - Use `--dry-run` for testing
    - Reduce `total_pairings` in configuration
-   - Use gpt-3.5-turbo instead of gpt-4
+   - Use a smaller model like gpt-4.1-nano
 
 4. **Agents not behaving as expected**
    - Review system prompts in agents.csv
@@ -312,7 +312,7 @@ self.payoff_matrices['prisoners_dilemma'] = {
 Run with verbose logging:
 
 ```bash
-python main.py --agents agents.csv --config config.csv --verbose
+python game_theory_main.py --agents example_agents_csv.csv --config example_experiment_csv.csv --verbose
 ```
 
 ### Getting Help

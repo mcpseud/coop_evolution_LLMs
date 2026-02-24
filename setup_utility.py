@@ -84,11 +84,11 @@ def verify_files():
     print("\nChecking required files...")
     
     required_files = [
-        'main.py',
+        'game_theory_main.py',
         'simulation_engine.py',
-        'agent.py',
+        'agent_class.py',
         'game_manager.py',
-        'scenarios.py',
+        'scenarios_manager.py',
         'config_loader.py',
         'data_logger.py'
     ]

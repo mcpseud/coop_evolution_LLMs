@@ -138,6 +138,11 @@ class DataLogger:
         
         self.logger.debug(f"Logged payoff: {agent_id} received {payoff} in {game_type}")
     
+    def log_round(self, round_data: Dict):
+        """Append round data to the current pairing in the complete log"""
+        if self.current_pairing is not None:
+            self.current_pairing['rounds'].append(round_data)
+
     def start_pairing(self, pairing_id: int, agent1_id: str, agent2_id: str):
         """Start logging a new pairing"""
         self.current_pairing = {

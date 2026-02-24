@@ -10,6 +10,9 @@ import json
 import os
 from datetime import datetime
 from pathlib import Path
+from dotenv import load_dotenv
+
+load_dotenv()
 
 from simulation_engine import SimulationEngine
 from config_loader import ConfigLoader

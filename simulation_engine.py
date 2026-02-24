@@ -9,9 +9,9 @@ import numpy as np
 from typing import List, Dict, Tuple, Optional
 from collections import defaultdict
 
-from agent import Agent
+from agent_class import Agent
 from game_manager import GameManager
-from scenarios import ScenarioManager
+from scenarios_manager import ScenarioManager
 
 
 class SimulationEngine:
@@ -77,10 +77,18 @@ class SimulationEngine:
             
             # Handle post-pairing gossip if enabled
             if self.experiment_config['allow_gossip']:
-                self._handle_gossip(agent1, agent2)
+                self._handle_gossip(agent1, agent2, pairing_num)
             
             self.stats['total_pairings'] += 1
         
+        # Finalize data logger
+        self.data_logger.finalize()
+
+        # Aggregate API call counts from all agents
+        self.stats['total_api_calls'] = sum(
+            agent.get_stats()['api_calls'] for agent in self.agent_pool
+        )
+
         # Calculate final statistics
         total_moves = self.stats['cooperation_count'] + self.stats['defection_count']
         cooperation_rate = self.stats['cooperation_count'] / total_moves if total_moves > 0 else 0
@@ -114,6 +122,7 @@ class SimulationEngine:
             games_for_rounds = [self._select_game_type() for _ in range(num_rounds)]
         
         # Track pairing history
+        self.data_logger.start_pairing(pairing_num, agent1.agent_id, agent2.agent_id)
         pairing_history = []
         
         for round_num in range(num_rounds):
@@ -132,32 +141,58 @@ class SimulationEngine:
             messages = []
             for comm_round in range(self.experiment_config['max_communication_rounds']):
                 # Agent 1 sends message
-                msg1 = agent1.communicate(context1, messages)
+                msg1, thinking1 = agent1.communicate(context1, messages)
                 if msg1:
                     messages.append({'sender': agent1.agent_id, 'message': msg1})
                     self.data_logger.log_communication(
-                        pairing_num, round_num, agent1.agent_id, agent2.agent_id, msg1
+                        pairing_num, round_num + 1, agent1.agent_id, agent2.agent_id, msg1
                     )
-                
+                if thinking1:
+                    self.data_logger.log_thinking(
+                        pairing_num, round_num + 1, agent1.agent_id, 'communication', thinking1
+                    )
+
                 # Agent 2 responds
-                msg2 = agent2.communicate(context2, messages)
+                msg2, thinking2 = agent2.communicate(context2, messages)
                 if msg2:
                     messages.append({'sender': agent2.agent_id, 'message': msg2})
                     self.data_logger.log_communication(
-                        pairing_num, round_num, agent2.agent_id, agent1.agent_id, msg2
+                        pairing_num, round_num + 1, agent2.agent_id, agent1.agent_id, msg2
+                    )
+                if thinking2:
+                    self.data_logger.log_thinking(
+                        pairing_num, round_num + 1, agent2.agent_id, 'communication', thinking2
                     )
             
             # Decision phase
-            move1 = agent1.make_move(context1, messages)
-            move2 = agent2.make_move(context2, messages)
-            
+            move1, move_thinking1 = agent1.make_move(context1, messages)
+            move2, move_thinking2 = agent2.make_move(context2, messages)
+
             # Log moves
-            self.data_logger.log_move(pairing_num, round_num, agent1.agent_id, move1, game_type)
-            self.data_logger.log_move(pairing_num, round_num, agent2.agent_id, move2, game_type)
-            
+            self.data_logger.log_move(pairing_num, round_num + 1, agent1.agent_id, move1, game_type)
+            self.data_logger.log_move(pairing_num, round_num + 1, agent2.agent_id, move2, game_type)
+
+            # Log move thinking
+            if move_thinking1:
+                self.data_logger.log_thinking(
+                    pairing_num, round_num + 1, agent1.agent_id, 'move_decision', move_thinking1
+                )
+            if move_thinking2:
+                self.data_logger.log_thinking(
+                    pairing_num, round_num + 1, agent2.agent_id, 'move_decision', move_thinking2
+                )
+
             # Calculate payoffs
             payoffs = self.game_manager.calculate_payoffs(game_type, move1, move2)
-            
+
+            # Log payoffs
+            self.data_logger.log_payoff(pairing_num, round_num + 1, agent1.agent_id, game_type, payoffs[0])
+            self.data_logger.log_payoff(pairing_num, round_num + 1, agent2.agent_id, game_type, payoffs[1])
+
+            # Update agent payoffs
+            agent1.stats['total_payoff'] += payoffs[0]
+            agent2.stats['total_payoff'] += payoffs[1]
+
             # Update statistics
             self._update_stats(game_type, move1, move2)
             
@@ -170,22 +205,37 @@ class SimulationEngine:
                 'payoffs': {agent1.agent_id: payoffs[0], agent2.agent_id: payoffs[1]},
                 'messages': messages
             })
-            
+
+            # Append round data to complete JSON log
+            self.data_logger.log_round(pairing_history[-1])
+
             self.stats['total_rounds'] += 1
         
         # Update memories after pairing
-        agent1.update_memory_after_pairing(agent2.agent_id, pairing_history)
-        agent2.update_memory_after_pairing(agent1.agent_id, pairing_history)
-        
+        mem_thinking1 = agent1.update_memory_after_pairing(agent2.agent_id, pairing_history)
+        mem_thinking2 = agent2.update_memory_after_pairing(agent1.agent_id, pairing_history)
+
         # Log memory updates
         self.data_logger.log_memory_update(
-            pairing_num, agent1.agent_id, agent2.agent_id, 
+            pairing_num, agent1.agent_id, agent2.agent_id,
             agent1.get_memory(agent2.agent_id)
         )
         self.data_logger.log_memory_update(
-            pairing_num, agent2.agent_id, agent1.agent_id, 
+            pairing_num, agent2.agent_id, agent1.agent_id,
             agent2.get_memory(agent1.agent_id)
         )
+
+        # Log memory thinking
+        if mem_thinking1:
+            self.data_logger.log_thinking(
+                pairing_num, 0, agent1.agent_id, 'memory_update', mem_thinking1
+            )
+        if mem_thinking2:
+            self.data_logger.log_thinking(
+                pairing_num, 0, agent2.agent_id, 'memory_update', mem_thinking2
+            )
+
+        self.data_logger.end_pairing()
     
     def _prepare_context(self, agent: Agent, opponent: Agent, history: List, scenario: Dict) -> Dict:
         """Prepare context for an agent including history, memory, and scenario"""
@@ -207,42 +257,63 @@ class SimulationEngine:
     def _update_stats(self, game_type: str, move1: str, move2: str):
         """Update statistics based on moves"""
         self.stats['moves_by_game'][game_type][f"{move1}-{move2}"] += 1
-        
-        # Count cooperation/defection (simplified - actual logic depends on game)
-        if move1.lower() in ['cooperate', 'collaborate', 'share']:
-            self.stats['cooperation_count'] += 1
-        else:
-            self.stats['defection_count'] += 1
-            
-        if move2.lower() in ['cooperate', 'collaborate', 'share']:
-            self.stats['cooperation_count'] += 1
-        else:
-            self.stats['defection_count'] += 1
+
+        # Cooperative moves per game type
+        cooperative_moves = {
+            'prisoners_dilemma': ['cooperate'],
+            'stag_hunt': ['stag'],
+            'hawk_dove': ['dove'],
+            'coordination': ['option_a', 'option_b']  # Both are cooperative in coordination
+        }
+
+        coop_set = cooperative_moves.get(game_type, ['cooperate'])
+
+        for move in [move1, move2]:
+            if move.lower() in coop_set:
+                self.stats['cooperation_count'] += 1
+            else:
+                self.stats['defection_count'] += 1
     
-    def _handle_gossip(self, agent1: Agent, agent2: Agent):
+    def _handle_gossip(self, agent1: Agent, agent2: Agent, pairing_num: int):
         """Handle gossip phase after pairing"""
         # Each agent can gossip to a random subset of other agents
         other_agents = [a for a in self.agent_pool if a not in [agent1, agent2]]
-        
+
         # Agent 1 gossips
         if other_agents and random.random() < 0.5:  # 50% chance to gossip
             gossip_target = random.choice(other_agents)
-            gossip1 = agent1.generate_gossip(agent2.agent_id, gossip_target.agent_id)
+            gossip1, gossip_thinking1 = agent1.generate_gossip(agent2.agent_id, gossip_target.agent_id)
             if gossip1:
-                gossip_target.receive_gossip(agent1.agent_id, agent2.agent_id, gossip1)
+                recv_thinking1 = gossip_target.receive_gossip(agent1.agent_id, agent2.agent_id, gossip1)
                 self.data_logger.log_gossip(
                     agent1.agent_id, gossip_target.agent_id, agent2.agent_id, gossip1
                 )
-        
+                if gossip_thinking1:
+                    self.data_logger.log_thinking(
+                        pairing_num, 0, agent1.agent_id, 'gossip_generation', gossip_thinking1
+                    )
+                if recv_thinking1:
+                    self.data_logger.log_thinking(
+                        pairing_num, 0, gossip_target.agent_id, 'gossip_processing', recv_thinking1
+                    )
+
         # Agent 2 gossips
         if other_agents and random.random() < 0.5:
             gossip_target = random.choice(other_agents)
-            gossip2 = agent2.generate_gossip(agent1.agent_id, gossip_target.agent_id)
+            gossip2, gossip_thinking2 = agent2.generate_gossip(agent1.agent_id, gossip_target.agent_id)
             if gossip2:
-                gossip_target.receive_gossip(agent2.agent_id, agent1.agent_id, gossip2)
+                recv_thinking2 = gossip_target.receive_gossip(agent2.agent_id, agent1.agent_id, gossip2)
                 self.data_logger.log_gossip(
                     agent2.agent_id, gossip_target.agent_id, agent1.agent_id, gossip2
                 )
+                if gossip_thinking2:
+                    self.data_logger.log_thinking(
+                        pairing_num, 0, agent2.agent_id, 'gossip_generation', gossip_thinking2
+                    )
+                if recv_thinking2:
+                    self.data_logger.log_thinking(
+                        pairing_num, 0, gossip_target.agent_id, 'gossip_processing', recv_thinking2
+                    )
     
     def _generate_agent_summaries(self) -> Dict:
         """Generate summary statistics for each agent"""
