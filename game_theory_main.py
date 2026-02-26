@@ -142,6 +142,7 @@ For more information, see README.md
         print(f"Total rounds played: {results['total_rounds']}")
         print(f"Total API calls: {results['total_api_calls']}")
         print(f"Cooperation rate: {results['cooperation_rate']:.2%}")
+        print(f"Cooperation rate (Ewan): {results['coop_ewan']:.2%}")
         print("\nDetailed results and logs saved to:", output_dir)
         
     except Exception as e:

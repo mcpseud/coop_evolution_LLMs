@@ -284,6 +284,7 @@ def generate_batch_summary(results):
 
     for name, runs in by_experiment.items():
         coop_rates = []
+        coop_ewan_rates = []
         api_calls = []
         total_rounds = []
         statuses = {"success": 0, "failed": 0, "timeout": 0}
@@ -294,6 +295,8 @@ def generate_batch_summary(results):
             if rj:
                 if "cooperation_rate" in rj:
                     coop_rates.append(rj["cooperation_rate"])
+                if "coop_ewan" in rj:
+                    coop_ewan_rates.append(rj["coop_ewan"])
                 if "total_api_calls" in rj:
                     api_calls.append(rj["total_api_calls"])
                 if "total_rounds" in rj:
@@ -303,6 +306,7 @@ def generate_batch_summary(results):
             "replicates": len(runs),
             "statuses": statuses,
             "cooperation_rate": _agg_stats(coop_rates),
+            "coop_ewan": _agg_stats(coop_ewan_rates),
             "total_api_calls": _agg_stats(api_calls),
             "total_rounds": _agg_stats(total_rounds),
             "runs": [
@@ -313,6 +317,11 @@ def generate_batch_summary(results):
                     "error": r["error"],
                     "cooperation_rate": (
                         r["results_json"].get("cooperation_rate")
+                        if r.get("results_json")
+                        else None
+                    ),
+                    "coop_ewan": (
+                        r["results_json"].get("coop_ewan")
                         if r.get("results_json")
                         else None
                     ),
@@ -373,20 +382,22 @@ def print_plan(experiments, jobs, workers, dry_run):
 
 def print_summary_table(summary):
     """Print a comparison table of results across experiments."""
-    print(f"\n{'=' * 70}")
+    print(f"\n{'=' * 85}")
     print(f"  {'Experiment':<20s} {'Reps':>5s} {'OK':>4s} {'Fail':>5s} "
-          f"{'Coop Rate':>12s} {'API Calls':>12s}")
-    print(f"  {'-' * 62}")
+          f"{'Coop Rate':>12s} {'Coop (Ewan)':>13s} {'API Calls':>12s}")
+    print(f"  {'-' * 77}")
     for name, exp in summary["experiments"].items():
         ok = exp["statuses"].get("success", 0)
         fail = exp["statuses"].get("failed", 0) + exp["statuses"].get("timeout", 0)
         coop = exp["cooperation_rate"]
+        coop_ewan = exp.get("coop_ewan")
         api = exp["total_api_calls"]
         coop_str = f"{coop['mean']:.2%}" if coop else "n/a"
+        coop_ewan_str = f"{coop_ewan['mean']:.2%}" if coop_ewan else "n/a"
         api_str = f"{api['mean']:.0f}" if api else "n/a"
         print(f"  {name:<20s} {exp['replicates']:>5d} {ok:>4d} {fail:>5d} "
-              f"{coop_str:>12s} {api_str:>12s}")
-    print(f"{'=' * 70}\n")
+              f"{coop_str:>12s} {coop_ewan_str:>13s} {api_str:>12s}")
+    print(f"{'=' * 85}\n")
 
 
 # ---------------------------------------------------------------------------

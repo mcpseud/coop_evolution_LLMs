@@ -35,7 +35,9 @@ class SimulationEngine:
             'total_api_calls': 0,
             'moves_by_game': defaultdict(lambda: defaultdict(int)),
             'cooperation_count': 0,
-            'defection_count': 0
+            'defection_count': 0,
+            'coop_ewan_count': 0,
+            'defection_ewan_count': 0
         }
         
     def _create_agent_pool(self, agents_config, api_key):
@@ -92,12 +94,16 @@ class SimulationEngine:
         # Calculate final statistics
         total_moves = self.stats['cooperation_count'] + self.stats['defection_count']
         cooperation_rate = self.stats['cooperation_count'] / total_moves if total_moves > 0 else 0
-        
+
+        total_moves_ewan = self.stats['coop_ewan_count'] + self.stats['defection_ewan_count']
+        coop_ewan = self.stats['coop_ewan_count'] / total_moves_ewan if total_moves_ewan > 0 else 0
+
         return {
             'total_pairings': self.stats['total_pairings'],
             'total_rounds': self.stats['total_rounds'],
             'total_api_calls': self.stats['total_api_calls'],
             'cooperation_rate': cooperation_rate,
+            'coop_ewan': coop_ewan,
             'moves_by_game': dict(self.stats['moves_by_game']),
             'agent_summaries': self._generate_agent_summaries()
         }
@@ -273,6 +279,21 @@ class SimulationEngine:
                 self.stats['cooperation_count'] += 1
             else:
                 self.stats['defection_count'] += 1
+
+        # Ewan's cooperation metric: for coordination games, cooperation
+        # requires both agents to choose the same option (successful coordination).
+        # For all other game types, uses the same individual-move logic as above.
+        if game_type == 'coordination':
+            if move1.lower() == move2.lower():
+                self.stats['coop_ewan_count'] += 2
+            else:
+                self.stats['defection_ewan_count'] += 2
+        else:
+            for move in [move1, move2]:
+                if move.lower() in coop_set:
+                    self.stats['coop_ewan_count'] += 1
+                else:
+                    self.stats['defection_ewan_count'] += 1
     
     def _handle_gossip(self, agent1: Agent, agent2: Agent, pairing_num: int):
         """Handle gossip phase after pairing"""
