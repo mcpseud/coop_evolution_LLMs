@@ -145,7 +145,11 @@ class Agent:
             for msg in previous_messages:
                 prompt_parts.append(f"{msg['sender']}: {msg['message']}")
         
-        prompt_parts.append("\nWhat would you like to say to your opponent? (Keep it brief and strategic)")
+        prompt_parts.append(
+            "\nYou are now speaking DIRECTLY to your opponent. "
+            "Your entire response will be sent to them as-is. "
+            "Do not include any preamble, narration, or meta-commentary — just write your message."
+        )
         
         if self.allow_thinking:
             prompt_parts.append("\nYou may use <thinking>...</thinking> tags for private thoughts.")
@@ -231,7 +235,9 @@ class Agent:
             f"\nYou have the opportunity to share information about {about_agent} with {to_agent}.",
             f"\nYour memory about {about_agent}:",
             self.memories.get(about_agent, "No prior interactions"),
-            f"\nWhat would you like to tell {to_agent} about {about_agent}?",
+            f"\nYou are now speaking DIRECTLY to {to_agent}. "
+            f"Your entire response will be sent to them as-is. "
+            f"Do not include any preamble, narration, or meta-commentary — just write what you want to say about {about_agent}.",
             "Keep it brief and consider your strategic goals.",
             "You may choose to be honest, deceptive, or decline to share."
         ]
