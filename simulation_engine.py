@@ -13,6 +13,14 @@ from agent_class import Agent
 from game_manager import GameManager
 from scenarios_manager import ScenarioManager
 
+PSEUDONYMS = [
+    "Alpha", "Bravo", "Charlie", "Delta", "Echo", "Foxtrot",
+    "Golf", "Hotel", "India", "Juliet", "Kilo", "Lima",
+    "Mike", "November", "Oscar", "Papa", "Quebec", "Romeo",
+    "Sierra", "Tango", "Uniform", "Victor", "Whiskey", "X-ray",
+    "Yankee", "Zulu"
+]
+
 
 class SimulationEngine:
     def __init__(self, agents_config, experiment_config, data_logger, api_key=None, dry_run=False):
@@ -43,11 +51,19 @@ class SimulationEngine:
     def _create_agent_pool(self, agents_config, api_key):
         """Create pool of agents based on frequency in config"""
         agent_pool = []
-        
+        pseudonym_idx = 0
+
         for idx, config in enumerate(agents_config):
             frequency = config.get('frequency', 1)
-            
+
             for i in range(frequency):
+                # Generate pseudonym: use NATO alphabet, append number if >26 agents
+                if pseudonym_idx < len(PSEUDONYMS):
+                    pseudonym = PSEUDONYMS[pseudonym_idx]
+                else:
+                    base = PSEUDONYMS[pseudonym_idx % len(PSEUDONYMS)]
+                    pseudonym = f"{base}-{pseudonym_idx // len(PSEUDONYMS) + 1}"
+
                 agent = Agent(
                     agent_id=f"{config['strategy_name']}_{idx}_{i}",
                     system_prompt=config['system_prompt'],
@@ -55,10 +71,15 @@ class SimulationEngine:
                     api_key=api_key,
                     memory_limit=self.experiment_config['memory_limit'],
                     allow_thinking=self.experiment_config['allow_thinking'],
-                    dry_run=self.dry_run
+                    dry_run=self.dry_run,
+                    pseudonym=pseudonym
                 )
                 agent_pool.append(agent)
-        
+                pseudonym_idx += 1
+
+        # Build pseudonym lookup map {real_id: pseudonym}
+        self.pseudonym_map = {agent.agent_id: agent.pseudonym for agent in agent_pool}
+
         self.logger.info(f"Created agent pool with {len(agent_pool)} agents")
         return agent_pool
     
@@ -149,7 +170,9 @@ class SimulationEngine:
                 # Agent 1 sends message
                 msg1, thinking1 = agent1.communicate(context1, messages)
                 if msg1:
-                    messages.append({'sender': agent1.agent_id, 'message': msg1})
+                    messages.append({'sender': agent1.agent_id,
+                                     'sender_pseudonym': agent1.pseudonym,
+                                     'message': msg1})
                     self.data_logger.log_communication(
                         pairing_num, round_num + 1, agent1.agent_id, agent2.agent_id, msg1
                     )
@@ -161,7 +184,9 @@ class SimulationEngine:
                 # Agent 2 responds
                 msg2, thinking2 = agent2.communicate(context2, messages)
                 if msg2:
-                    messages.append({'sender': agent2.agent_id, 'message': msg2})
+                    messages.append({'sender': agent2.agent_id,
+                                     'sender_pseudonym': agent2.pseudonym,
+                                     'message': msg2})
                     self.data_logger.log_communication(
                         pairing_num, round_num + 1, agent2.agent_id, agent1.agent_id, msg2
                     )
@@ -218,8 +243,10 @@ class SimulationEngine:
             self.stats['total_rounds'] += 1
         
         # Update memories after pairing
-        mem_thinking1 = agent1.update_memory_after_pairing(agent2.agent_id, pairing_history)
-        mem_thinking2 = agent2.update_memory_after_pairing(agent1.agent_id, pairing_history)
+        mem_thinking1 = agent1.update_memory_after_pairing(
+            agent2.agent_id, pairing_history, opponent_pseudonym=agent2.pseudonym)
+        mem_thinking2 = agent2.update_memory_after_pairing(
+            agent1.agent_id, pairing_history, opponent_pseudonym=agent1.pseudonym)
 
         # Log memory updates
         self.data_logger.log_memory_update(
@@ -247,6 +274,7 @@ class SimulationEngine:
         """Prepare context for an agent including history, memory, and scenario"""
         return {
             'opponent_id': opponent.agent_id,
+            'opponent_pseudonym': self.pseudonym_map[opponent.agent_id],
             'scenario': scenario,
             'history': history,
             'memory': agent.get_memory(opponent.agent_id),
@@ -303,9 +331,13 @@ class SimulationEngine:
         # Agent 1 gossips
         if other_agents and random.random() < 0.5:  # 50% chance to gossip
             gossip_target = random.choice(other_agents)
-            gossip1, gossip_thinking1 = agent1.generate_gossip(agent2.agent_id, gossip_target.agent_id)
+            gossip1, gossip_thinking1 = agent1.generate_gossip(
+                agent2.agent_id, gossip_target.agent_id,
+                about_pseudonym=agent2.pseudonym, to_pseudonym=gossip_target.pseudonym)
             if gossip1:
-                recv_thinking1 = gossip_target.receive_gossip(agent1.agent_id, agent2.agent_id, gossip1)
+                recv_thinking1 = gossip_target.receive_gossip(
+                    agent1.agent_id, agent2.agent_id, gossip1,
+                    from_pseudonym=agent1.pseudonym, about_pseudonym=agent2.pseudonym)
                 self.data_logger.log_gossip(
                     agent1.agent_id, gossip_target.agent_id, agent2.agent_id, gossip1
                 )
@@ -321,9 +353,13 @@ class SimulationEngine:
         # Agent 2 gossips
         if other_agents and random.random() < 0.5:
             gossip_target = random.choice(other_agents)
-            gossip2, gossip_thinking2 = agent2.generate_gossip(agent1.agent_id, gossip_target.agent_id)
+            gossip2, gossip_thinking2 = agent2.generate_gossip(
+                agent1.agent_id, gossip_target.agent_id,
+                about_pseudonym=agent1.pseudonym, to_pseudonym=gossip_target.pseudonym)
             if gossip2:
-                recv_thinking2 = gossip_target.receive_gossip(agent2.agent_id, agent1.agent_id, gossip2)
+                recv_thinking2 = gossip_target.receive_gossip(
+                    agent2.agent_id, agent1.agent_id, gossip2,
+                    from_pseudonym=agent2.pseudonym, about_pseudonym=agent1.pseudonym)
                 self.data_logger.log_gossip(
                     agent2.agent_id, gossip_target.agent_id, agent1.agent_id, gossip2
                 )

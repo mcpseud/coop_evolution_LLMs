@@ -15,8 +15,10 @@ import os
 class Agent:
     def __init__(self, agent_id: str, system_prompt: str, model: str = "gpt-4",
                  api_key: Optional[str] = None, memory_limit: int = 500,
-                 allow_thinking: bool = True, dry_run: bool = False):
+                 allow_thinking: bool = True, dry_run: bool = False,
+                 pseudonym: Optional[str] = None):
         self.agent_id = agent_id
+        self.pseudonym = pseudonym or agent_id
         self.system_prompt = system_prompt
         self.model = model
         self.memory_limit = memory_limit
@@ -78,9 +80,11 @@ class Agent:
 
         return move, thinking
     
-    def update_memory_after_pairing(self, opponent_id: str, pairing_history: List[Dict]) -> Optional[str]:
+    def update_memory_after_pairing(self, opponent_id: str, pairing_history: List[Dict],
+                                     opponent_pseudonym: Optional[str] = None) -> Optional[str]:
         """Update memory about an opponent after a pairing. Returns thinking."""
-        prompt = self._build_memory_update_prompt(opponent_id, pairing_history)
+        prompt = self._build_memory_update_prompt(opponent_id, opponent_pseudonym or opponent_id,
+                                                   pairing_history)
 
         thinking, response = self._call_llm(prompt, "memory_update")
 
@@ -95,12 +99,16 @@ class Agent:
         self.logger.info(f"Updated memory for {opponent_id}: {response[:100]}...")
         return thinking
     
-    def generate_gossip(self, about_agent: str, to_agent: str) -> Tuple[Optional[str], Optional[str]]:
+    def generate_gossip(self, about_agent: str, to_agent: str,
+                         about_pseudonym: Optional[str] = None,
+                         to_pseudonym: Optional[str] = None) -> Tuple[Optional[str], Optional[str]]:
         """Generate gossip about another agent. Returns (gossip, thinking)."""
         if about_agent not in self.memories:
             return None, None
 
-        prompt = self._build_gossip_prompt(about_agent, to_agent)
+        prompt = self._build_gossip_prompt(about_agent, to_agent,
+                                            about_pseudonym or about_agent,
+                                            to_pseudonym or to_agent)
 
         thinking, response = self._call_llm(prompt, "gossip_generation")
 
@@ -109,9 +117,13 @@ class Agent:
 
         return response, thinking
     
-    def receive_gossip(self, from_agent: str, about_agent: str, gossip: str) -> Optional[str]:
+    def receive_gossip(self, from_agent: str, about_agent: str, gossip: str,
+                        from_pseudonym: Optional[str] = None,
+                        about_pseudonym: Optional[str] = None) -> Optional[str]:
         """Process received gossip and update memories. Returns thinking."""
-        prompt = self._build_gossip_processing_prompt(from_agent, about_agent, gossip)
+        prompt = self._build_gossip_processing_prompt(from_agent, about_agent, gossip,
+                                                       from_pseudonym or from_agent,
+                                                       about_pseudonym or about_agent)
 
         thinking, response = self._call_llm(prompt, "gossip_processing")
 
@@ -127,23 +139,25 @@ class Agent:
     
     def _build_communication_prompt(self, context: Dict, previous_messages: List[Dict]) -> str:
         """Build prompt for communication phase"""
+        opponent_pseudonym = context.get('opponent_pseudonym', context['opponent_id'])
         prompt_parts = [
             self.system_prompt,
-            f"\nYour ID: {self.agent_id}",
-            f"Opponent ID: {context['opponent_id']}",
+            f"\nYour ID: {self.pseudonym}",
+            f"Opponent ID: {opponent_pseudonym}",
             f"\nCurrent Scenario:\n{context['scenario']['description']}",
         ]
-        
+
         if context.get('memory'):
-            prompt_parts.append(f"\nYour memory about {context['opponent_id']}:\n{context['memory']}")
-        
+            prompt_parts.append(f"\nYour memory about {opponent_pseudonym}:\n{context['memory']}")
+
         if context.get('history'):
             prompt_parts.append(f"\nPrevious rounds with this opponent: {len(context['history'])}")
-        
+
         if previous_messages:
             prompt_parts.append("\nConversation so far:")
             for msg in previous_messages:
-                prompt_parts.append(f"{msg['sender']}: {msg['message']}")
+                display_name = msg.get('sender_pseudonym', msg['sender'])
+                prompt_parts.append(f"{display_name}: {msg['message']}")
         
         prompt_parts.append(
             "\nYou are now speaking DIRECTLY to your opponent. "
@@ -160,22 +174,24 @@ class Agent:
         """Build prompt for move decision"""
         game_type = context['scenario']['game_type']
         options = context['scenario']['options']
-        
+        opponent_pseudonym = context.get('opponent_pseudonym', context['opponent_id'])
+
         prompt_parts = [
             self.system_prompt,
-            f"\nYour ID: {self.agent_id}",
-            f"Opponent ID: {context['opponent_id']}",
+            f"\nYour ID: {self.pseudonym}",
+            f"Opponent ID: {opponent_pseudonym}",
             f"\nScenario:\n{context['scenario']['description']}",
             f"\nYour options:",
         ]
-        
+
         for option in options:
             prompt_parts.append(f"- {option}")
-        
+
         if messages:
             prompt_parts.append("\nCommunication phase:")
             for msg in messages:
-                prompt_parts.append(f"{msg['sender']}: {msg['message']}")
+                display_name = msg.get('sender_pseudonym', msg['sender'])
+                prompt_parts.append(f"{display_name}: {msg['message']}")
         
         if context.get('history'):
             # Show summary of past interactions
@@ -196,15 +212,16 @@ class Agent:
         
         return "\n".join(prompt_parts)
     
-    def _build_memory_update_prompt(self, opponent_id: str, pairing_history: List[Dict]) -> str:
+    def _build_memory_update_prompt(self, opponent_id: str, opponent_pseudonym: str,
+                                     pairing_history: List[Dict]) -> str:
         """Build prompt for memory update"""
         prompt_parts = [
             self.system_prompt,
-            f"\nYou just finished playing with {opponent_id}.",
+            f"\nYou just finished playing with {opponent_pseudonym}.",
             f"Total rounds played: {len(pairing_history)}",
             "\nSummary of interactions:"
         ]
-        
+
         for round_data in pairing_history:
             prompt_parts.append(
                 f"Round {round_data['round']} ({round_data['game_type']}): "
@@ -212,13 +229,13 @@ class Agent:
                 f"they chose {round_data['moves'].get(opponent_id)}, "
                 f"your payoff: {round_data['payoffs'].get(self.agent_id)}"
             )
-        
+
         if opponent_id in self.memories:
-            prompt_parts.append(f"\nYour previous memory about {opponent_id}:")
+            prompt_parts.append(f"\nYour previous memory about {opponent_pseudonym}:")
             prompt_parts.append(self.memories[opponent_id])
-        
+
         prompt_parts.append(
-            f"\nWrite a brief memory note about {opponent_id} based on this interaction. "
+            f"\nWrite a brief memory note about {opponent_pseudonym} based on this interaction. "
             f"Focus on their play style, trustworthiness, and any patterns you noticed. "
             f"Maximum {self.memory_limit} characters."
         )
@@ -228,16 +245,17 @@ class Agent:
 
         return "\n".join(prompt_parts)
     
-    def _build_gossip_prompt(self, about_agent: str, to_agent: str) -> str:
+    def _build_gossip_prompt(self, about_agent: str, to_agent: str,
+                              about_pseudonym: str, to_pseudonym: str) -> str:
         """Build prompt for generating gossip"""
         prompt_parts = [
             self.system_prompt,
-            f"\nYou have the opportunity to share information about {about_agent} with {to_agent}.",
-            f"\nYour memory about {about_agent}:",
+            f"\nYou have the opportunity to share information about {about_pseudonym} with {to_pseudonym}.",
+            f"\nYour memory about {about_pseudonym}:",
             self.memories.get(about_agent, "No prior interactions"),
-            f"\nYou are now speaking DIRECTLY to {to_agent}. "
+            f"\nYou are now speaking DIRECTLY to {to_pseudonym}. "
             f"Your entire response will be sent to them as-is. "
-            f"Do not include any preamble, narration, or meta-commentary — just write what you want to say about {about_agent}.",
+            f"Do not include any preamble, narration, or meta-commentary — just write what you want to say about {about_pseudonym}.",
             "Keep it brief and consider your strategic goals.",
             "You may choose to be honest, deceptive, or decline to share."
         ]
@@ -247,16 +265,17 @@ class Agent:
 
         return "\n".join(prompt_parts)
     
-    def _build_gossip_processing_prompt(self, from_agent: str, about_agent: str, gossip: str) -> str:
+    def _build_gossip_processing_prompt(self, from_agent: str, about_agent: str, gossip: str,
+                                         from_pseudonym: str, about_pseudonym: str) -> str:
         """Build prompt for processing received gossip"""
         prompt_parts = [
             self.system_prompt,
-            f"\n{from_agent} told you about {about_agent}:",
+            f"\n{from_pseudonym} told you about {about_pseudonym}:",
             f'"{gossip}"',
-            f"\nYour current memory about {about_agent}:",
+            f"\nYour current memory about {about_pseudonym}:",
             self.memories.get(about_agent, "No prior interactions"),
-            f"\nBased on this gossip and considering {from_agent}'s potential motivations,",
-            f"update your memory about {about_agent}. Be skeptical of potentially biased information.",
+            f"\nBased on this gossip and considering {from_pseudonym}'s potential motivations,",
+            f"update your memory about {about_pseudonym}. Be skeptical of potentially biased information.",
             f"Maximum {self.memory_limit} characters."
         ]
 
