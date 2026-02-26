@@ -1,0 +1,5 @@
+experiment_name,agents_csv,experiment_csv,replicates
+baseline,example_agents_csv.csv,example_experiment_csv.csv,3
+small_test,test_agents.csv,test_experiment.csv,2
+full_agents_small_config,example_agents_csv.csv,test_experiment.csv,2
+test_agents_full_config,test_agents.csv,example_experiment_csv.csv,2

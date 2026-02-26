@@ -11,10 +11,11 @@ A comprehensive system for running game theory experiments with Large Language M
 5. [Configuration Files](#configuration-files)
 6. [Game Types](#game-types)
 7. [Running Simulations](#running-simulations)
-8. [Understanding Output](#understanding-output)
-9. [Analyzing Results](#analyzing-results)
-10. [Customization](#customization)
-11. [Troubleshooting](#troubleshooting)
+8. [Batch Experiments](#batch-experiments)
+9. [Understanding Output](#understanding-output)
+10. [Analyzing Results](#analyzing-results)
+11. [Customization](#customization)
+12. [Troubleshooting](#troubleshooting)
 
 ## Overview
 
@@ -27,6 +28,7 @@ This system simulates strategic interactions between LLM-based agents in busines
 - **Reputation System**: Agents can share information (gossip) about others
 - **Private Thinking**: Agents can use `<thinking>` tags for reasoning
 - **Comprehensive Logging**: All interactions, decisions, and thoughts are recorded
+- **Batch Experiments**: Run replicates and parameter variations with built-in parallelism
 
 ## Installation
 
@@ -61,6 +63,7 @@ Place all the Python files in a directory:
 - `scenarios_manager.py`
 - `config_loader.py`
 - `data_logger.py`
+- `batch_runner.py`
 
 ## Quick Start
 
@@ -89,6 +92,7 @@ The system consists of several modular components:
 5. **scenarios_manager.py**: Provides business contexts for games
 6. **config_loader.py**: Loads configuration from CSV files
 7. **data_logger.py**: Records all simulation data
+8. **batch_runner.py**: Runs batches of experiments with replicates and parallelism
 
 ### How It Works
 
@@ -187,6 +191,65 @@ Test your configuration without using API credits:
 ```bash
 python game_theory_main.py --agents example_agents_csv.csv --config example_experiment_csv.csv --dry-run
 ```
+
+## Batch Experiments
+
+The batch runner lets you run multiple experiments (with replicates and parameter variations) from a single CSV config file.
+
+### Batch Config File
+
+Create a CSV file defining your experiments:
+
+```csv
+experiment_name,agents_csv,experiment_csv,replicates
+baseline,example_agents_csv.csv,example_experiment_csv.csv,5
+no_gossip,example_agents_csv.csv,config_no_gossip.csv,5
+more_rounds,example_agents_csv.csv,config_more_rounds.csv,5
+```
+
+- **experiment_name**: Subdirectory name for results (letters, digits, hyphens, underscores)
+- **agents_csv**: Path to agent configuration file
+- **experiment_csv**: Path to experiment configuration file
+- **replicates**: Number of times to repeat this experiment (default: 1)
+
+### Running a Batch
+
+```bash
+# Sequential dry-run
+python batch_runner.py --batch example_batch_config.csv --output results/ --dry-run
+
+# Parallel with 3 workers
+python batch_runner.py --batch example_batch_config.csv --output results/ --workers 3
+
+# With API key and delay between launches
+python batch_runner.py --batch example_batch_config.csv --output results/ --workers 2 --api-key YOUR_KEY --delay 2.0
+```
+
+### Batch Command-Line Options
+
+- `--batch`: Path to batch config CSV (required)
+- `--output`: Base output directory (default: results)
+- `--workers`: Max parallel experiments (default: 1)
+- `--api-key`: OpenAI API key (passed through to each experiment)
+- `--dry-run`: Pass --dry-run to each experiment
+- `--verbose`: Show subprocess output in real time
+- `--delay`: Seconds between job launches (default: 1.0)
+
+### Batch Output Structure
+
+```
+results/
+├── batch_summary.json
+├── baseline/
+│   ├── rep_1/   (all CSVs + JSONs from this run)
+│   ├── rep_2/
+│   └── rep_3/
+└── no_gossip/
+    ├── rep_1/
+    └── rep_2/
+```
+
+The `batch_summary.json` file aggregates results per experiment, including cooperation rate (mean/min/max), API call totals, and per-run details. A comparison table is also printed to the terminal when the batch completes.
 
 ## Understanding Output
 
@@ -329,7 +392,7 @@ python game_theory_main.py --agents example_agents_csv.csv --config example_expe
 3. **Monitor Costs**: Make sure you are using the correct models
 4. **Iterate Prompts**: Agent behavior depends heavily on system prompts
 5. **Analyze Patterns**: Look for emergent behaviors across many pairings
-6. **Compare Strategies**: Run same configuration multiple times for statistical significance
+6. **Compare Strategies**: Use the batch runner to run replicates and compare across configurations
 
 ## Contributing to Research
 
